@@ -144,6 +144,32 @@ class NukeTemplateHandler:
         for node in nuke.selectedNodes():
             node["selected"].setValue(False)
 
+        # Hand off to tk-nuke-projectsettings (if configured in this
+        # environment) now that the template has been pasted in and the
+        # script is in its final state. tk-nuke-projectsettings's own
+        # apply_settings() is also registered on addOnScriptLoad("Root"),
+        # the same event that triggers check_for_placeholder() above -
+        # relying on that shared callback would make correctness depend
+        # on which app happens to register its callback first (i.e. on
+        # this env's apps: block ordering), and would let apply_settings()
+        # run before this function has finished deleting/replacing nodes
+        # and creating the plate Read node, risking that Read node being
+        # deleted by the cleanup pass above. Calling it explicitly here,
+        # once generate_template() has fully finished, removes both
+        # problems regardless of app registration order.
+        try:
+            projectsettings_app = self.app.engine.apps.get(
+                "tk-nuke-projectsettings"
+            )
+            if projectsettings_app is not None:
+                projectsettings_app.handler.apply_settings()
+        except Exception:
+            logger.warning(
+                "tk-nuke-template: tk-nuke-projectsettings.apply_settings() "
+                "failed after template generation",
+                exc_info=True,
+            )
+
     def add_callbacks(self):
         # Add callbacks when changing context
         nuke.addOnScriptLoad(self.check_for_placeholder, nodeClass="Root")
